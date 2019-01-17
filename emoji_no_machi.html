@@ -1,0 +1,453 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <script type="text/javascript">
+      // Emoji Town
+
+      // MIT License
+      // Copyright 2015-2019 Tieg Zaharia
+      // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+      // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+      // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+      window.emoji = {
+        homes: ["🏠", "🏡"],
+        buildings: ["🏫", "🏢", "🏣", "🏥", "🏦", "🏪", "🏩",
+          "🏨", "💒", "⛪", "🏬", "🏤"],
+        trees: [ "🌲", "🌳"],
+        farm_animals: ["🐖", "🐐", "🐄", "🐂", "🐄", "🐥", "🚜", "🐑", "🐣"],
+        farm_crops: ["🌾", "🌽"],
+        circus: ["🎪", "🐘"],
+        streets: ["&nbsp;"],
+        road_row: ["🚴", "🚵", "🏇", "🚃", "🚎", "🚌",
+          "🚋", "🚙", "🚗", "🚕", "🚛", "🚚", "🚓", "🚐", "🚂",
+          "🚒", "🚐", "🚑", "🚲"],
+        road_col: ["🚘", "🚖", "🚔", "🚍"],
+        people: ["🏃", "🚶", "👫", "💃", "👬", "👭", "👯"],
+        road_animals: ["🐢", "🐌", "🐩", "🐈"],
+        grass_animals: ["🐢", "🐛", "🐝", "🐜", "🐞", "🐌", "🐀",
+          "🐍", "🐇", "🐕", "🐩", "🐈"]
+      }
+
+      Math.randomNumber = function (max) {
+        return Math.floor(Math.random() * max) + 1;
+      }
+
+      Math.randomChoice = function (zero_to_one_threshhold) {
+        //zero_to_one_threshhold ||= 0.5;
+        return Math.random() < zero_to_one_threshhold;
+      }
+
+      Array.prototype.random = function () {
+        return this[Math.randomNumber(this.length) - 1];
+      }
+
+      function Town(opts) {
+        this.cells = [];
+        this.with_bgcolors = true;
+
+        opts = opts || {};
+
+        this.street_row_frequency = opts.street_row_frequency ||
+          Math.randomNumber(10) + 2;
+        this.street_col_frequency = opts.street_col_frequency ||
+          Math.randomNumber(10) + 2;
+        this.cell_width = opts.cell_width || 19;
+        this.cell_height = opts.cell_height || 19;
+        this.width = this.num_cols * this.cell_width;
+        this.height = this.num_rows * this.cell_height;
+
+        this.calculateCellCount();
+        this.buildCells();
+      }
+
+      Town.prototype.resize = function (width, height) {
+        var old_width = this.width,
+          old_height = this.height,
+          old_num_cols = this.num_cols,
+          old_num_rows = this.num_rows,
+          row_diff,
+          col_diff;
+
+        this.calculateCellCount(width, height);
+
+        row_diff = this.num_rows - old_num_rows;
+        col_diff = this.num_cols - old_num_cols;
+
+        if (col_diff > 0 || row_diff > 0) {
+          // TODO could optimize this by passing the start_row/start_col
+          // so you don't have to iterate over all of them again
+          this.buildCells();
+        }
+      }
+
+      Town.prototype.step = function () {
+        var cells = this.cells,
+          rightCell,
+          leftCell,
+          belowCell,
+          aboveCell,
+          isRoadRow,
+          isRoadCol;
+
+        cells.forEach(function (row) {
+          isRoadRow = row[0].isRoad && row[1].isRoad;
+
+          row.forEach(function (cell) {
+            leftCell = row[cell.col - 1];
+            rightCell = row[cell.col + 1];
+            belowCell = cells[cell.row + 1] && cells[cell.row + 1][cell.col];
+            isRoadCol = cell.row == 0 && cell.isRoad && !!belowCell && belowCell.isRoad;
+
+            // right-to-left
+            if (isRoadRow) {
+              if (!cell.isEmpty && cell.type == 'roadrow') {
+                cell.replace(leftCell);
+              }
+            }
+            if (isRoadCol) {
+              for (var r = cells.length - 1; r >= 0; r--) {
+                curCell = cells[r][cell.col];
+                aboveCell = cells[r - 1] && cells[r - 1][cell.col];
+
+                if (aboveCell && !aboveCell.isEmpty && aboveCell.type == 'roadcol') {
+                  curCell.replaceWith(aboveCell);
+                } else if (!curCell.isEmpty && curCell.row == this.town.num_rows - 1) {
+                  // for the last row of each column, remove cars from screen
+                  curCell.isEmpty = true;
+                  curCell.callChr();
+                }
+              }
+
+              // new obj on far-top roads?
+              if (isRoadCol && row[cell.col].isEmpty) {
+                row[cell.col].type = 'roadcol';
+                row[cell.col].isEmpty = undefined;
+                row[cell.col].callChr();
+              }
+            }
+          });
+
+          // new obj on far-right roads?
+          if (isRoadRow && row[row.length - 1].isEmpty) {
+            row[row.length - 1].isEmpty = undefined;
+            row[row.length - 1].callChr();
+          }
+        });
+      }
+
+      Town.prototype.calculateCellCount = function (w, h) {
+        w = w || document.body.offsetWidth;
+        h = h || document.body.offsetHeight;
+
+        this.num_cols = Math.ceil(w/this.cell_width);
+        this.num_rows = Math.ceil(h/this.cell_height);
+      }
+
+      Town.prototype.buildCells = function (start_row, start_col) {
+        start_row = start_row || 0;
+        start_col = start_col || 0;
+
+        for (var row = start_row; row < this.num_rows; row++) {
+          this.cells[row] = this.cells[row] || [];
+          for (var col = start_col; col < this.num_cols; col++) {
+            // there might be a pre-added town (building block, etc)
+            if (!this.cells[row][col]) {
+              this.cells[row][col] = new TownCell(this, row, col);
+            }
+          }
+        }
+      }
+
+      function TownCell(town, row, col, predetermined_type) {
+        var type;
+
+        this.town     = town;
+        this.row      = row;
+        this.col      = col;
+        this.isRoad   = false;
+        this.isFarm   = false;
+        this.isCircus = false;
+
+        if (predetermined_type) {
+          this.type = predetermined_type;
+          this.skipCallbacks = true;
+        } else if (this.roadRowDecision()) {
+          this.type = "roadrow";
+        } else if (this.roadColDecision()) {
+          this.type = "roadcol";
+        } else if (this.farmDecision()) {
+          this.type = "farm";
+        } else if (this.circusDecision()) {
+          this.type = "circus";
+        } else if (this.treeDecision()) {
+          this.type = "tree";
+        } else if (this.buildingDecision()) {
+          this.type = "buildings";
+        } else {
+          this.type = "home";
+        }
+
+        this.callBg();
+        this.callChr();
+        this.callAfterBuild();
+      }
+
+      TownCell.prototype.callChr = function () {
+        this.chr = TownCell.Types[this.type].chr(this);
+      }
+
+      TownCell.prototype.callBg = function () {
+        this.bg = TownCell.Types[this.type].bg(this);
+      }
+
+      TownCell.prototype.callAfterBuild = function () {
+        if (TownCell.Types[this.type].afterBuild && !this.skipCallbacks) {
+           TownCell.Types[this.type].afterBuild(this);
+        }
+      }
+
+      TownCell.prototype.checkAdjacentCells = function (method) {
+          var upCell = this.town.cells[this.row - 1][this.col],
+          leftCell = this.town.cells[this.row][this.col - 1];
+
+        return (upCell && upCell[method]) || (leftCell && leftCell[method]);
+      }
+
+      TownCell.prototype.farmDecision = function () {
+        return this.checkAdjacentCells('isFarm') ||
+          (this.isTopLeftCorner() && Math.randomChoice(0.05));
+      }
+
+      TownCell.prototype.circusDecision = function () {
+        return this.checkAdjacentCells('isCircus') ||
+          (this.isTopLeftCorner() && Math.randomChoice(0.02));
+      }
+
+      TownCell.prototype.treeDecision = function () {
+        return Math.randomChoice(0.8);
+      }
+
+      TownCell.prototype.buildingDecision = function () {
+        return Math.randomChoice(0.3);
+      }
+
+      TownCell.prototype.roadRowDecision = function () {
+        return this.row % this.town.street_row_frequency == 0;
+      }
+
+      TownCell.prototype.roadColDecision = function () {
+        return this.col % this.town.street_col_frequency == 0;
+      }
+
+      TownCell.prototype.isTopLeftCorner = function () {
+        var topCell = this.town.cells[this.row - 1][this.col],
+          leftCell = this.town.cells[this.row][this.col - 1];
+
+        return topCell && leftCell && topCell.isRoad && leftCell.isRoad;
+      }
+
+      TownCell.Types = {
+        roadrow: {
+          chr: function(cell) {
+            if (typeof cell.isEmpty === 'undefined') {
+              cell.isEmpty = !Math.randomChoice(0.05);
+            }
+            return cell.isEmpty ? "&nbsp;" : emoji.road_row.random();
+          },
+          bg: function(cell) { return "#444"; },
+          afterBuild: function (cell) { cell.isRoad = true; }
+        },
+        roadcol: {
+          chr: function (cell) {
+            if (typeof cell.isEmpty === 'undefined') {
+              cell.isEmpty = !Math.randomChoice(0.05);
+            }
+            return cell.isEmpty ? "&nbsp;" : emoji.road_col.random();
+          },
+          bg: function (cell) { return "#444"; },
+          afterBuild: function (cell) { cell.isRoad = true; }
+        },
+        tree: {
+          chr: function (cell) { return emoji.trees.random(); },
+          bg: function (cell) { return "green"; }
+        },
+        farm: {
+          chr: function (cell) {
+            if (Math.randomChoice(0.8)) {
+              return emoji.farm_crops.random();
+            } else {
+              return emoji.farm_animals.random();
+            }
+          },
+          bg: function (cell) { return "darkgreen"; },
+          afterBuild: function (cell) { cell.isFarm = true; }
+        },
+        circus: {
+          chr: function (cell) {
+            if (Math.randomChoice(0.2)) {
+              return emoji.circus.random();
+            } else {
+              return "&nbsp";
+            }
+          },
+          bg: function (cell) { return "#CCC"; },
+          afterBuild: function (cell) { cell.isCircus = true; }
+        },
+        home: {
+          chr: function (cell) { return emoji.homes.random(); },
+          bg: function (cell) { return "green"; }
+        },
+        buildings: {
+          chr: function (cell) { return emoji.buildings.random(); },
+          bg: function (cell) { return "green"; },
+          afterBuild: function(cell) {
+            // var r = cell.row, c = cell.col - 1;
+
+            // if (cell.town.cells[r][c] && cell.town.cells[r][c].isRoad) {
+            //   cell.town.cells[r][c] =
+            //     new TownCell(cell.town, r, c, cell.state);
+            // }
+
+            // var r = cell.row, c = cell.col + 1;
+
+            // if (cell.town.cells[r][c] && cell.town.cells[r][c].isRoad) {
+            //   cell.town.cells[r][c] =
+            //     new TownCell(cell.town, r, c, cell.state);
+            // }
+          }
+        }
+      }
+
+      TownCell.prototype.replace = function (cell) {
+        if (cell) {
+          cell.chr = this.chr;
+          cell.isEmpty = this.isEmpty;
+          cell.type = this.type;
+        }
+        this.chr = "&nbsp;";
+        this.isEmpty = true;
+        this.type = 'roadrow';
+      }
+
+      TownCell.prototype.replaceWith = function (cell) {
+        if (cell) {
+          this.chr = cell.chr;
+          this.isEmpty = cell.isEmpty;
+          this.type = cell.type;
+          cell.chr = "&nbsp;";
+          cell.isEmpty = true;
+          cell.type = 'roadrow';
+        }
+      }
+
+      TownCell.prototype.render = function () {
+        var styles = [];
+        if (this.town.with_bgcolors) {
+          styles = styles.concat("background-color: " + this.bg);
+        }
+        styles = styles.concat("width: " + this.town.cell_width + "px");
+        styles = styles.concat("height: " + this.town.cell_height + "px");
+        styles = styles.concat("overflow: hidden");
+        styles = styles.concat("text-align: center");
+
+        return '<div style="' + styles.join(';') + '">' + this.chr + '</div>';
+      }
+      var interval,
+        town = null,
+        paused = true;
+
+      function redraw () {
+        // TODO could just keep the DOM in memory and manipulate it
+        // instead of redrawing hte table every frame
+        var table = '<table \
+         cellpadding="0" cellspacing="0" border="0" \
+         id="emojinomachi" \
+         style="width: ' + town.width + 'px; height: ' + town.height + 'px;">';
+
+        town.cells.forEach(function (row) {
+          table  = table.concat('<tr>');
+          row.forEach(function (cell) {
+
+            table = table.concat('<td>');
+            table = table.concat(cell.render());
+            table = table.concat('</td>');
+          })
+          table  = table.concat('<tr />');
+        });
+        table  = table.concat('</table>');
+
+        document.getElementById('emojinomachi').innerHTML = table;
+      }
+
+      function refresh () {
+        town = new Town();
+      }
+
+      function step () {
+        town.step();
+        redraw();
+      }
+
+      function start () {
+        interval = setInterval(function () {
+          town.step();
+          redraw();
+        }, 100);
+      }
+
+      function pause () {
+        clearInterval(interval);
+      }
+
+      function with_bgcolors() {
+        town.with_bgcolors = !town.with_bgcolors;
+      }
+
+      window.addEventListener('load', function () {
+        // TODO make an exception for Firefox too
+        if (navigator.userAgent.match(/chrome/ig)) {
+//          document.write("This <a href='#'>page</a> doesn't work in Chrome currently.")
+        }
+
+        document.getElementById('with_bgcolors').addEventListener('click', with_bgcolors);
+        document.getElementById('refresh').addEventListener('click' , refresh);
+        // document.getElementById('step').addEventListener('click' , step);
+        refresh();
+        start();
+      });
+
+      window.addEventListener('resize', function () {
+        var x = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+        var y = window.innerHeight  || document.documentElement.clientHeight || document.body.clientHeight;
+
+        town.resize(x, y);
+        redraw();
+      });
+    </script>
+    <style>
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      table, table tr, table td {
+        border-collapse:collapse;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="emojinomachi">
+      </div>
+    <input id="with_bgcolors" type="button" value="Toggle Color" style="position: absolute; top: 10px; left: 10px;" />
+    <input id="refresh" type="button" value="Refresh" style="position: absolute; top: 40px; left: 10px;" />
+<!--
+    <input id="pause" type="button" value="Pause" style="position: absolute; top: 10px; left: 10px;" />
+    <input id="step" type="button" value="Step" style="position: absolute; top: 50px; left: 10px;" />
+//-->
+  </body>
+</html>
