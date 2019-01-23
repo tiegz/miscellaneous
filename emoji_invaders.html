@@ -103,6 +103,7 @@
 
         remove() {
           this.node.remove();
+          // TODO maybe replace array with a dictionary?
           window.space.aliens.splice(window.space.aliens.indexOf(this), 1);
         }
 
@@ -186,6 +187,32 @@
         }
       }
 
+      class ExplosionCell extends Cell {
+        constructor(x, y) {
+          super(x, y);
+          this.age = 0;
+        }
+
+        render() {
+          var div = super.render();
+          div.innerHTML = "💥";
+          this.node = div;
+          return div;
+        }
+
+        remove() {
+          this.node.remove();
+          window.space.explosions.splice(window.space.explosions.indexOf(this), 1);
+        }
+
+        step() {
+          this.age += 1;
+          if (this.age > 20 && this.node !== undefined) {
+            this.remove();
+          }
+        }
+      }
+
       class BulletCell extends Cell {
         constructor(x, y, player) {
           super(x, y);
@@ -194,7 +221,7 @@
 
         render() {
           var div = super.render();
-          div.innerHTML = '🔥';
+          div.innerHTML = '⚡️';
           //div.style.transform = "rotate(90deg)";
           this.node = div;
           return div;
@@ -218,7 +245,12 @@
               return alien.x == this.x && alien.y == this.y
             });
             if (alien) {
+              var explosion = new ExplosionCell(alien.x, alien.y);
+
               window.space.score.increment(alien.score());
+              window.space.explosions.push(explosion);
+              window.space.container.appendChild(explosion.render());
+
               alien.remove();
               this.remove();
             }
@@ -291,9 +323,11 @@
           this.rows = new Array();
           this.aliens = new Array();
           this.stars = new Array();
+          this.explosions = new Array();
         };
 
         init() {
+          // TODO remove this.rows
           for(var y = 0; y < this.height; y++) {
             this.rows[y] = [];
             for(var x = 0; x < this.width; x++) {
@@ -320,6 +354,7 @@
             new BasicAlienCell(18, 6)
           ];
 
+          // just for visual show
           this.stars = [
             new StarCell(
               Math.floor(window.space.width * Math.random()),
@@ -388,8 +423,8 @@
           this.aliens.forEach(function(alien, idx) {
             container.appendChild(alien.render());
           });
-          this.stars.forEach(function(alien, idx) {
-            container.appendChild(alien.render());
+          this.stars.forEach(function(star, idx) {
+            container.appendChild(star.render());
           });
           container.appendChild(this.player.render());
           container.appendChild(this.score.render());
@@ -403,6 +438,9 @@
             alien.step();
           })
           this.player.step();
+          this.explosions.forEach(function (explosion, idx) {
+            explosion.step();
+          })
         }
       };
 
