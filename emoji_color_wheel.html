@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Emoji Color Circle</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif
+        table-layout: fixed;
+      }
+      #container {
+        width: 100%;
+      }
+      table {
+        margin: 0 auto;
+      }
+      table, table tr, table tr td {
+        border-spacing: 0;
+        border-collapse: collapse;
+      }
+      table tr td div {
+        overflow: hidden;
+        font-size: 10px;
+        border-spacing: 0px;
+      }
+      #controls {
+        font-size: 14px;
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 5px;
+        background: rgba(0.7, 0.7, 0.7, 0.3);
+        border-radius: 5px;
+      }
+      #controls input {
+        margin: 5px
+      }
+      #controls button#stepBack,
+      #controls button#step,
+      #controls button#play {
+        padding: 2px 3px 3px 3px;
+        text-align: center;
+      }
+    </style>
+    <script src="color_to_emoji_map_4bit.js"></script>
+    <script>
+      // Emoji Color Wheel
+
+      // MIT License
+      // Copyright 2020 Tieg Zaharia
+      // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+      // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+      // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+      var container;
+      var colorTable;
+      var cols;
+      var rows;
+
+      var cellWidth = 15;
+      var cellHeight = 15;
+      var fontSize = 12;
+
+      var drawing = false;
+      var paused = false;
+      var rotation = 0;
+      var showEmoji = true;
+      var showColor = true;
+
+      var rotationDelay = 100; // ms
+      var rotationDelayText;
+      var intervalRange;
+      var interval;
+
+      document.addEventListener('DOMContentLoaded', function (event) {
+        container = document.getElementById('container');
+        colorTable = document.getElementById('colorTable');
+        intervalRange = document.getElementById('intervalRange');
+        rotationDelayText = document.getElementById('rotationDelayText');
+        setSizes();
+        buildTable();
+        restartInterval();
+      });
+
+      function restartInterval() {
+        rotationDelay = intervalRange.value;
+        rotationDelayText.innerText = rotationDelay + 'ms';
+        clearInterval(interval);
+        interval = setInterval(() => drawCircle(cols, rows), rotationDelay);
+      }
+
+      function setSizes() {
+        var windowWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth
+        var windowHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight
+        cols = Math.max(Math.floor((windowWidth / cellWidth)), 10)
+        rows = Math.max(Math.floor((windowHeight / cellHeight)), 10)
+        container.style.width = cols * cellWidth + 'px';
+        container.style.height = rows * cellHeight + 'px';
+      }
+
+      function buildTable() {
+        for (var x = 0; x < cols; x++) {
+          var tr = document.createElement('tr')
+          for (var y = 0; y < rows; y++) {
+            var td = document.createElement('td');
+            var div = document.createElement('div');
+            div.style.width = cellWidth + 'px';
+            div.style.height = cellHeight + 'px';
+            div.style.fontSize = fontSize + 'px';
+            td.appendChild(div);
+            tr.appendChild(td);
+          }
+          colorTable.appendChild(tr);
+        }
+      }
+
+      // Matches a 4-bit color to corresponding emoji with that dominant color.
+      function findEmoji(red, green, blue) {
+        red = Math.min(15, Math.max(0, red))
+        green = Math.min(15, Math.max(0, green))
+        blue = Math.min(15, Math.max(0, blue))
+        return colorToEmojiMap[[red, green, blue].join(',')]
+      }
+
+      function drawCircle(cols, rows) {
+        if (drawing === true || paused === true) { return; }
+        else { drawing = true; }
+
+        let circleRadius = Math.floor(Math.min(cols, rows) / 2);
+        for (let left = -circleRadius; left < circleRadius; left++) {
+          for (let top = -circleRadius; top < circleRadius; top++) {
+            // Get the polar coordinates
+            let polarRadius = Math.sqrt(left * left + top * top);
+            let polarPhi = Math.atan2(top, left);
+            if (polarRadius <= circleRadius) {
+              let degrees = ((polarPhi + Math.PI) / (2 * Math.PI)) * 360; // Convert radians to degrees
+              degrees += rotation;
+              let x = left + circleRadius;
+              let y = top + circleRadius;
+
+              let [hue, saturation, value] = [degrees, 1.0, 1.0];
+              let [r, g, b] = hsv2rgb(hue, saturation, value);
+              let [r4Bit, g4Bit, b4Bit] = [Math.round(r / 16), Math.round(g / 16), Math.round(b / 16)];
+              let emoji = findEmoji(r4Bit, g4Bit, b4Bit)
+              if (emoji) {
+                colorTable.children[y].children[x].children[0].innerText = showEmoji ? emoji : '';
+                colorTable.children[y].children[x].children[0].style.backgroundColor = showColor ? 'rgb(' + Math.round(r * 16) + ',' + Math.round(g * 16) + ',' + Math.round(b * 16) + ')' : '';
+              } else {
+                console.log('Couldnt find emoji at ', r4Bit, g4Bit, b4Bit)
+              }
+            }
+          }
+        }
+        rotation = rotation === 360 ? 0 : rotation - 1;
+        drawing = false;
+      }
+
+      // Via https://stackoverflow.com/a/54024653
+      // under the CC BY-SA 4.0 license: https://creativecommons.org/licenses/by-sa/4.0/
+      // Modified to return 0-255 instead of 0-1.
+      function hsv2rgb(h, s, v) {
+        let f = (n, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0);
+        return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
+      }
+    </script>
+  </head>
+  <body>
+    <div id="container">
+      <table id="colorTable" border=0 cellspacing=0 cellpadding=0></table>
+      <div id="controls">
+        <button onclick="paused = !paused; this.innerText = this.innerText === '⏸' ? '▶️' : '⏸';" name="play" id="play">⏸</button>
+        <br />
+        Show Emoji: <input type="checkbox" id="showEmoji" onchange="showEmoji = !showEmoji" checked="checked" />
+        <br />
+        Show Color: <input type="checkbox" id="showColor" onchange="showColor = !showColor" checked="checked" />
+        <br />
+        Rotation delay: <span id="rotationDelayText"></span>
+        <br />
+        <input id="intervalRange" type="range" value=100 min=0 max=1000 onchange="restartInterval()" />
+      </div>
+    </div>
+    <script src="https://www.google-analytics.com/urchin.js" type="text/javascript"></script>
+    <script type="text/javascript">
+      _uacct = "UA-385403-1";
+      urchinTracker();
+    </script>
+  </body>
+</html>
